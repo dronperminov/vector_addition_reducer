@@ -1,6 +1,6 @@
 #include "vector_reducer.h"
 
-VectorReducer::VectorReducer() {
+VectorReducer::VectorReducer() : uniform(0.0, 1.0) {
     dimension = 0;
 }
 
@@ -25,7 +25,7 @@ void VectorReducer::printTask() const {
         std::cout << "  " << target << std::endl;
 }
 
-int VectorReducer::reduce(const ReduceParameters& parameters) {
+int VectorReducer::reduce(const ReduceParameters& parameters, std::mt19937& generator) {
     initialize();
 
     if (parameters.verbose)
@@ -33,16 +33,8 @@ int VectorReducer::reduce(const ReduceParameters& parameters) {
 
     while (!uncovered.empty()) {
         std::vector<Candidate> candidates = getCandidates(parameters.maxAbsValue);
-        std::vector<double> scores;
-
-        for (const Candidate& candidate : candidates)
-            scores.push_back(getScore(candidate.vector, parameters));
-
-        size_t imax = 0;
-        for (size_t i = 1; i < scores.size(); i++)
-            if (scores[i] > scores[imax])
-                imax = i;
-
+        std::vector<double> scores = scoreCandidates(candidates, parameters);
+        size_t imax = selectCandidate(scores, parameters.strategy, generator);
         addCandidate(candidates[imax]);
 
         if (parameters.verbose) {
@@ -181,34 +173,7 @@ bool VectorReducer::isCovered(const Vector& target) const {
     return pool.find(target) != pool.end();
 }
 
-std::vector<Candidate> VectorReducer::getCandidates(int maxAbsValue) const {
-    std::vector<Candidate> candidates;
-
-    for (size_t i = 0; i < vectors.size(); i++) {
-        for (size_t j = i + 1; j < vectors.size(); j++) {
-            const Vector& vi = vectors[i];
-            const Vector& vj = vectors[j];
-            std::vector<Candidate> vs = {
-                {i, j, 1, vi + vj}, 
-                {i, j, -1, vi - vj}
-            };
-
-            for (const Candidate& candidate: vs) {
-                if (pool.find(candidate.vector) != pool.end())
-                    continue;
-
-                if (maxAbsValue > 0 && candidate.vector.maxAbs() > maxAbsValue)
-                    continue;
-
-                candidates.emplace_back(candidate);
-            }
-        }
-    }
-
-    return candidates;
-}
-
-double VectorReducer::getScore(const Vector& vector, const ReduceParameters& parameters) {
+double VectorReducer::getScore(const Vector& vector, const ReduceParameters& parameters) const {
     double score = 0.0;
 
     for (const Vector& target : uncovered) {
@@ -240,4 +205,88 @@ double VectorReducer::getScore(const Vector& vector, const ReduceParameters& par
     }
 
     return score;
+}
+
+std::vector<Candidate> VectorReducer::getCandidates(int maxAbsValue) const {
+    std::vector<Candidate> candidates;
+
+    for (size_t i = 0; i < vectors.size(); i++) {
+        for (size_t j = i + 1; j < vectors.size(); j++) {
+            const Vector& vi = vectors[i];
+            const Vector& vj = vectors[j];
+            std::vector<Candidate> vs = {
+                {i, j, 1, vi + vj}, 
+                {i, j, -1, vi - vj}
+            };
+
+            for (const Candidate& candidate: vs) {
+                if (pool.find(candidate.vector) != pool.end())
+                    continue;
+
+                if (maxAbsValue > 0 && candidate.vector.maxAbs() > maxAbsValue)
+                    continue;
+
+                candidates.emplace_back(candidate);
+            }
+        }
+    }
+
+    return candidates;
+}
+
+std::vector<double> VectorReducer::scoreCandidates(const std::vector<Candidate>& candidates, const ReduceParameters& parameters) const {
+    std::vector<double> scores;
+    scores.reserve(candidates.size());
+
+    for (const Candidate& candidate : candidates)
+        scores.push_back(getScore(candidate.vector, parameters));
+
+    return scores;
+}
+
+size_t VectorReducer::selectCandidate(const std::vector<double>& scores, const std::string &strategy, std::mt19937& generator) {
+    if (strategy == "greedy-alternative")
+        return selectGreedyAlternativeCandidate(scores, generator);
+
+    if (strategy == "greedy-random")
+        return selectGreedyRandomCandidate(scores, generator);
+
+    return selectGreedyCandidate(scores);
+}
+
+size_t VectorReducer::selectGreedyCandidate(const std::vector<double> &scores) {
+    size_t imax = 0;
+    for (size_t i = 1; i < scores.size(); i++)
+        if (scores[i] > scores[imax])
+            imax = i;
+
+    return imax;
+}
+
+size_t VectorReducer::selectGreedyAlternativeCandidate(const std::vector<double> &scores, std::mt19937& generator) {
+    size_t imax = 0;
+    for (size_t i = 1; i < scores.size(); i++)
+        if (scores[i] > scores[imax])
+            imax = i;
+
+    std::vector<size_t> indices;
+    for (size_t i = 0; i < scores.size(); i++)
+        if (scores[i] == scores[imax])
+            indices.push_back(i);
+
+    return indices[generator() % indices.size()];
+}
+
+size_t VectorReducer::selectGreedyRandomCandidate(const std::vector<double> &scores, std::mt19937& generator) {
+    size_t imax = 0;
+    for (size_t i = 1; i < scores.size(); i++)
+        if (scores[i] > scores[imax])
+            imax = i;
+
+    std::vector<size_t> indices;
+    for (size_t i = 0; i < scores.size(); i++)
+        if (scores[i] == scores[imax])
+            indices.push_back(i);
+
+    return uniform(generator) < 0.9 ? indices[generator() % indices.size()] : generator() % scores.size();
 }

@@ -37,15 +37,18 @@ int main(int argc, char **argv) {
     parser.add("--one-step-weight", "-osw", ArgType::Real, "Weight for one step cover", "100");
     parser.add("--hamming-weight", "-hw", ArgType::Real, "Weight for Hamming distance", "5");
     parser.add("--matches-weight", "-mw", ArgType::Real, "Weight for matches count", "3");
+    parser.addChoices("--select-strategy", "-s", ArgType::String, "Strategy of candidate selection", {"greedy", "greedy-alternative", "greedy-random"}, "greedy");
 
     parser.addSection("Other parameters");
     parser.add("--print-task", ArgType::Flag, "Print readed task");
     parser.add("--verbose", "-v", ArgType::Flag, "Print verbose info during reducing");
+    parser.add("--seed", ArgType::Natural, "Random seed, 0 uses time-based seed", "0");
 
     if (!parser.parse(argc, argv))
         return -1;
 
     std::string inputPath = parser["--input-path"];
+
     ReduceParameters parameters;
     parameters.maxAbsValue = std::stod(parser["--max-abs-value"]);
     parameters.coverWeight = std::stod(parser["--cover-weight"]);
@@ -53,6 +56,11 @@ int main(int argc, char **argv) {
     parameters.hammingWeight = std::stod(parser["--hamming-weight"]);
     parameters.matchesWeight = std::stod(parser["--matches-weight"]);
     parameters.verbose = parser.isSet("--verbose");
+    parameters.strategy = parser["--select-strategy"];
+
+    int seed = std::stoi(parser["--seed"]);
+    if (!seed)
+        seed = time(0);
 
     std::cout << "Parsed parameters:" << std::endl;
     std::cout << "- input path: " << inputPath << std::endl;
@@ -61,6 +69,8 @@ int main(int argc, char **argv) {
     std::cout << "- one step weight: " << parameters.oneStepWeight << std::endl;
     std::cout << "- Hamming weight: " << parameters.hammingWeight << std::endl;
     std::cout << "- matches weight: " << parameters.matchesWeight << std::endl;
+    std::cout << "- selection strategy: " << parameters.strategy << std::endl;
+    std::cout << "- random seed: " << seed << std::endl;
     std::cout << std::endl;
 
     std::vector<std::vector<int>> targets = readTargets(inputPath);
@@ -73,8 +83,10 @@ int main(int argc, char **argv) {
     if (parser.isSet("--print-task"))
         reducer.printTask();
 
+    std::mt19937 generator(seed);
+
     auto startTime = std::chrono::high_resolution_clock::now();
-    int additions = reducer.reduce(parameters);
+    int additions = reducer.reduce(parameters, generator);
     auto endTime = std::chrono::high_resolution_clock::now();
 
     double seconds = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count() / 1000.0;
