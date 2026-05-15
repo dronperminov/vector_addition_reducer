@@ -79,12 +79,17 @@ int Vector::compare(const Vector& vector) const {
 
 int Vector::hammingDistance(const Vector& vector) const {
     int distance = 0;
+    int distanceInverse = 0;
 
-    for (int i = 0; i < dimension; i++)
+    for (int i = 0; i < dimension; i++) {
         if (values[i] != vector.values[i])
             distance++;
 
-    return distance;
+        if (values[i] != -vector.values[i])
+            distanceInverse++;
+    }
+
+    return std::min(distance, distanceInverse);
 }
 
 int Vector::matchesCount(const Vector& vector) const {

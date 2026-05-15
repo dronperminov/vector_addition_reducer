@@ -15,6 +15,7 @@ struct Candidate {
 };
 
 struct ReduceParameters {
+    bool verbose;
     int maxAbsValue;
     double coverWeight;
     double oneStepWeight;
@@ -32,12 +33,20 @@ class VectorReducer {
     std::vector<Vector> vectors;
     std::vector<Candidate> steps;
 public:
-    VectorReducer(const std::vector<std::vector<int>>& targets);
+    VectorReducer();
+
+    void setTargets(const std::vector<std::vector<int>>& newTargets);
 
     void printTask() const;
     int reduce(const ReduceParameters& parameters);
 private:
+    void initialize();
+    void addCandidate(const Candidate& candidate);
+    void removeUnused();
+
     bool isCovered(const Vector& target) const;
+    bool verify() const;
+
     std::vector<Candidate> getCandidates(int maxAbsValue) const;
     double getScore(const Vector& vector, const ReduceParameters& parameters);
 };
